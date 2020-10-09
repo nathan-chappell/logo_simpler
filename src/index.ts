@@ -1,6 +1,10 @@
 // index.ts
 
 const C = (s: string) => document.createElement(s);
+const CSVG = () => document.createElementNS("http://www.w3.org/2000/svg",'svg');
+const domParser = new DOMParser();
+const parseSVG = (s: string) =>
+  domParser.parseFromString(s, "image/svg+xml").documentElement;
 
 type Radius = number;
 type BorderWidth = number;
@@ -20,16 +24,16 @@ const bw = 0.05;
 */
 
 /*
-          <animateTransform 
-            attributeName="transform"
-            type="rotate"
-            by="360"
-            dur="3s"
-            repeatCount="indefinite"
-            fill="freeze"
-            additive="sum"
-            />
-            */
+<animateTransform 
+  attributeName="transform"
+  type="rotate"
+  by="360"
+  dur="3s"
+  repeatCount="indefinite"
+  fill="freeze"
+  additive="sum"
+  />
+*/
 
 interface RingProps {
   arc: Degrees;
@@ -60,7 +64,7 @@ const Ring = (props: Partial<RingProps>) => {
   const y3 = rr * Math.sin(-deg2rad(_arc));
   const A1 = RingA(rr, x1, y1, x2, y2);
   const A2 = RingA(rr, x2, y2, x3, y3);
-  const open = `
+  const path = parseSVG(`
     <path
       d="${A1} ${A2}"
       transform="rotate(${-phase})"
@@ -68,25 +72,33 @@ const Ring = (props: Partial<RingProps>) => {
       stroke-width="${r / 2}"
       fill="none"
       stroke-linecap="round"
-    >`;
-  const close = `</path>`;
-  const animation = ``;
-  return open + animation + close;
+    />`);
+  return path;
 };
 
+type PhaseFromMouseEvent = (e: MouseEvent) => Degrees;
+
+const getDeg: PhaseFromMouseEvent = (e) => Math.atan2(e.movementX, e.movementY);
+
 const Logo = () => {
-  const e = document.createElement("div");
+  const viewBox = "-1.125 -1.125 2.25 2.25";
+  //const svg = parseSVG(`<svg viewBox="${viewBox}"></svg>`);
+  const svg = CSVG();
+  svg.setAttribute('viewBox',viewBox);
+  const rings = [
+    Ring({ l: 1, arc: 90, phase: 135 }),
+    Ring({ l: 2, arc: 180, phase: 90 }),
+    Ring({ l: 3, arc: 270, phase: 45 }),
+    Ring({ l: 4, arc: 360 }),
+  ];
+  rings.forEach((r) => svg.appendChild(r));
+  console.log(svg);
+  const e = C("div");
   e.className = "logo-proto";
-  e.innerHTML = `
-      <svg viewBox="-1.125 -1.125 2.25 2.25">
-      ${Ring({ l: 1, arc: 90, phase: 135 })}
-      ${Ring({ l: 2, arc: 180, phase: 90 })}
-      ${Ring({ l: 3, arc: 270, phase: 45 })}
-      ${Ring({ l: 4, arc: 360 })}
-        <path d="M -.05 0 l .1 0" stroke-width=".1" stroke="black" />
-      </svg>
-      `;
+  e.appendChild(svg);
   console.log(e);
+  // hack!
+  e.innerHTML = e.innerHTML;
   return e;
 };
 

@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "serve": "node server.js",
+    "server": "node server.js",
     "watch": "tsc --watch",
-    "start": "concurrently \"npm:server\" \"npm:watch\""
+    "start": "concurrently --raw \"npm:server\" \"npm:watch\""
   },
   "keywords": [],
   "author": "",

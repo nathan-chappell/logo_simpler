@@ -5,7 +5,13 @@ const port = process.env.PORT || 7777;
 const hostname = process.env.HOSTNAME || 'localhost';
 
 const server = http.createServer((req, res) => {
-  res.write(fs.readFileSync("./index.html"));
+  if (req.url === '/dist/index.js') {
+    res.write(fs.readFileSync('./dist/index.js'));
+  } else if (req.url === '/dist/index.js.map') {
+    res.write(fs.readFileSync('./dist/index.js.map'));
+  } else {
+    res.write(fs.readFileSync("./index.html"));
+  }
   res.end();
 });
 
