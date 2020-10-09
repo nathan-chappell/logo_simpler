@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>logo demo</title>
+    <script src="./dist/index.js" defer></script>
+    <style>
+      .logo-proto {
+        border: solid black 2px;
+        display: inline-block;
+        width: 400px;
+        height: 400px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="logo-proto">
+      <svg viewBox="-1.05 -1.05 2.1 2.1">
+        <path
+          d="M 1 0 A 1 1 0 0 0 -1 0 A 1 1 0 0 0 0 1"
+          stroke="hsl(120,50%,50%,.75)"
+          stroke-width=".1"
+          fill="none"
+          stroke-linecap="round"
+        >
+          <animateTransform 
+            attributeName="transform"
+            type="rotate"
+            by="360"
+            dur="3s"
+            repeatCount="1"
+            fill="freeze"
+            additive="sum"
+            />
+        </path>
+        <path d="M -.05 0 l .1 0" stroke-width=".1" stroke="black" />
+      </svg>
+    </div>
+    <div id="app-root"></div>
+  </body>
+</html>
