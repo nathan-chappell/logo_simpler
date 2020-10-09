@@ -3,7 +3,7 @@ declare type Radius = number;
 declare type BorderWidth = number;
 declare type Degrees = number;
 declare type Level = number;
-declare const deg2rad: (d: number) => number;
+declare const deg2rad: (d: Degrees) => number;
 interface RingProps {
     arc: Degrees;
     phase: Degrees;
