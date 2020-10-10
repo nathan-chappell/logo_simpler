@@ -1,80 +1,91 @@
-abstract class AnimationFrameBase {
-  calcMode: "linear" | "spline";
-  dur: string;
-  //repeatCount: number | "indefinite";
-  repeatCount: string;
+type Value = string;
 
-  setAttributes(el: SVGAnimationElement) {
-    el.setAttribute("dur", frame.dur);
-    el.setAttribute("repeatCount", frame.repeatCount);
-  }
-
-  static normalize(el: SVGAnimationElement) {
-  }
-}
-
-interface LinearAnimationFrame extends AnimationFrameBase {
-  to: string;
-}
-
-const setLinearAttributes = (
-  el: SVGAnimationElement,
-  frame: LinearAnimationFrame
-) => {
-  setBaseAttributes(el, frame);
-  const from = el.getAttribute("to");
-  if (from === null) {
-    throw Error('from null! (unreachable)');
-  }
-  el.setAttribute("from", from);
-  el.setAttribute("to", frame.to);
+const frameTemplates = {
+  linear: {
+    to: "0",
+    dur: "2s",
+    repeatCount: "1",
+    calcMode: "linear",
+    additive: "sum",
+    accumulate: "sum",
+  },
+  spline: {
+    keyTimes: "0 1",
+    values: "0 0",
+    keySplines: ".5 0 .5 1",
+    dur: "2s",
+    repeatCount: "1",
+    calcMode: "spline",
+    additive: "sum",
+    accumulate: "sum",
+  },
 };
 
-interface SplineAnimationFrame extends AnimationFrameBase {
-  // calcMode === 'spline'
-  keyTimes: string;
-  keySplines: string;
-  values: string;
-}
+type FrameTemplates = typeof frameTemplates;
+type AnimationFrame = FrameTemplates[keyof typeof frameTemplates];
 
-const setSplineAttributes = (
-  el: SVGAnimationElement,
-  frame: SplineAnimationFrame
-) => {
-  setBaseAttributes(el, frame);
-  el.setAttribute("keyTimes", frame.keyTimes);
-  el.setAttribute("keySplines", frame.keySplines);
-  el.setAttribute("values", frame.values);
-};
-
-const playNow = (el: SVGAnimationElement) => {
-  el.setAttribute("begin", el.getCurrentTime().toString());
-};
-
-type AnimationFrame = LinearAnimationFrame | SplineAnimationFrame;
-
-function isLinearFrame(frame: AnimationFrame): frame is LinearAnimationFrame {
+/*
+function isLinearFrame(
+  frame: AnimationFrame
+): frame is FrameTemplates["linear"] {
   return frame.calcMode === "linear";
 }
 
-function isSplineFrame(frame: AnimationFrame): frame is SplineAnimationFrame {
+function isSplineFrame(
+  frame: AnimationFrame
+): frame is FrameTemplates["spline"] {
   return frame.calcMode === "spline";
 }
+*/
 
-/*
- * AnimationProxy gives access to an animated attribute.
- * The interface provides methods to add a frame to a sequence of animations:
- *
- * push: adds frame to end of queue.
- *       This means that the frame will be played whenever all currently
- *       scheduled animations complete
- *
- * next: add frame to front of queue
- *       This means that the frame will be played whenever the current
- *       animation completes (the endEvent event fires)
- *
- * skip: immediately start nth animation
- */
+const normalizeAttrs = (
+  nFrame: AnimationFrame,
+  frame: Partial<AnimationFrame>,
+  el: SVGAnimationElement
+) => {
+  (Object.keys(nFrame) as Array<keyof AnimationFrame>).forEach(
+    (attr: keyof AnimationFrame) => {
+      nFrame[attr] = frame[attr] ?? el.getAttribute(attr) ?? nFrame[attr];
+    }
+  );
+  return nFrame;
+};
+
+function normalizeFrame(
+  type: "linear",
+  frame: Partial<FrameTemplates["linear"]>,
+  el: SVGAnimationElement
+): FrameTemplates["linear"];
+
+function normalizeFrame(
+  type: "spline",
+  frame: Partial<FrameTemplates["spline"]>,
+  el: SVGAnimationElement
+): FrameTemplates["spline"];
+
+function normalizeFrame(
+  type: keyof FrameTemplates,
+  frame: Partial<FrameTemplates["spline"]> | Partial<FrameTemplates["linear"]>,
+  el: SVGAnimationElement
+): AnimationFrame {
+  if (type === "linear") {
+    const nFrame: FrameTemplates["linear"] = { ...frameTemplates["linear"] };
+    normalizeAttrs(nFrame, frame, el);
+    return nFrame;
+  } else if (type === "spline") {
+    const nFrame: FrameTemplates["linear"] = { ...frameTemplates["linear"] };
+    normalizeAttrs(nFrame, frame, el);
+    return nFrame;
+  } else {
+    throw Error("bad frame");
+  }
+}
+
+// should take a callback or something...
+const begin = (el: SVGAnimationElement, onEnd: () => void) => {
+  el.setAttribute("begin", el.getCurrentTime().toString());
+  el.addEventListener("endEvent", onEnd, { once: true });
+};
 
 interface IAnimationProxy<F> {
   pushFront(frame: Partial<F>): IAnimationProxy<F>;
@@ -148,27 +159,69 @@ class CircularQueue<T> extends SequentialQueue<T> {
 }
 
 class AnimationProxyBase<
-  F extends AnimationFrame = LinearAnimationFrame,
-  Q extends Queue<F> = SequentialQueue<F>
+  T extends "linear" | "spline",
+  Frame extends AnimationFrame = FrameTemplates[T]
 > {
+  protected Q: Queue<Partial<Frame>>;
+
   constructor(
-    protected _animationElement: SVGAnimationElement,
-    protected _Q: Q
-  ) {}
+    protected animationElement: SVGAnimationElement,
+    //protected type: T = "linear",
+    protected type: T,
+    qtype: "sequential" | "circular" = "sequential"
+  ) {
+    switch (qtype) {
+      case "sequential":
+        this.Q = new SequentialQueue<Partial<Frame>>();
+        break;
+      case "circular":
+        this.Q = new CircularQueue<Partial<Frame>>();
+        break;
+      default:
+        throw Error(`bad qtype: ${qtype}`);
+    }
+  }
 
   protected playNext() {
-    if (this._Q.isEmpty()) {
+    if (this.Q.isEmpty()) {
       return;
     }
-    const front = this._Q.front();
-    this._Q.advance();
-    if (isLinearFrame(front)) {
-      setLinearAttributes(this._animationElement, front);
-    } else if (isSplineFrame(front)) {
-      setSplineAttributes(this._animationElement, front);
+    /*
+     * if paused, don't do anything... or something like that...
+     */
+    const front = this.Q.front();
+    let nFrame: AnimationFrame;
+    if (this.type === "linear") {
+      nFrame = normalizeFrame(
+        this.type as "linear",
+        front,
+        this.animationElement
+      );
+    } else if (this.type === "spline") {
+      nFrame = normalizeFrame(
+        this.type as "spline",
+        front,
+        this.animationElement
+      );
     } else {
-      throw Error('bad frame: ' + JSON.stringify(front,null,2));
+      throw Error("bad type");
     }
-    playNow(this._animationElement);
+    this.Q.advance();
+    Object.keys(nFrame).forEach((attr) => {
+      this.animationElement.setAttribute(
+        attr,
+        nFrame[attr as keyof typeof nFrame]
+      );
+    });
+    begin(this.animationElement, this.playNext);
   }
+  /*
+   * pushFront
+   * pushBack
+   * skip
+   *
+   * later:
+   *  pause
+   *  resume
+   */
 }

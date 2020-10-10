@@ -12,6 +12,17 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __spreadArrays = (this && this.__spreadArrays) || function () {
     for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
     for (var r = Array(s), k = 0, i = 0; i < il; i++)
@@ -19,41 +30,66 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
             r[k] = a[j];
     return r;
 };
-var AnimationFrameBase = /** @class */ (function () {
-    function AnimationFrameBase() {
-    }
-    AnimationFrameBase.prototype.setAttributes = function (el) {
-        el.setAttribute("dur", frame.dur);
-        el.setAttribute("repeatCount", frame.repeatCount);
-    };
-    AnimationFrameBase.normalize = function (el) {
-    };
-    return AnimationFrameBase;
-}());
-var setLinearAttributes = function (el, frame) {
-    setBaseAttributes(el, frame);
-    var from = el.getAttribute("to");
-    if (from === null) {
-        throw Error('from null! (unreachable)');
-    }
-    el.setAttribute("from", from);
-    el.setAttribute("to", frame.to);
+var frameTemplates = {
+    linear: {
+        to: "0",
+        dur: "2s",
+        repeatCount: "1",
+        calcMode: "linear",
+        additive: "sum",
+        accumulate: "sum",
+    },
+    spline: {
+        keyTimes: "0 1",
+        values: "0 0",
+        keySplines: ".5 0 .5 1",
+        dur: "2s",
+        repeatCount: "1",
+        calcMode: "spline",
+        additive: "sum",
+        accumulate: "sum",
+    },
 };
-var setSplineAttributes = function (el, frame) {
-    setBaseAttributes(el, frame);
-    el.setAttribute("keyTimes", frame.keyTimes);
-    el.setAttribute("keySplines", frame.keySplines);
-    el.setAttribute("values", frame.values);
+/*
+function isLinearFrame(
+  frame: AnimationFrame
+): frame is FrameTemplates["linear"] {
+  return frame.calcMode === "linear";
+}
+
+function isSplineFrame(
+  frame: AnimationFrame
+): frame is FrameTemplates["spline"] {
+  return frame.calcMode === "spline";
+}
+*/
+var normalizeAttrs = function (nFrame, frame, el) {
+    Object.keys(nFrame).forEach(function (attr) {
+        var _a, _b;
+        nFrame[attr] = (_b = (_a = frame[attr]) !== null && _a !== void 0 ? _a : el.getAttribute(attr)) !== null && _b !== void 0 ? _b : nFrame[attr];
+    });
+    return nFrame;
 };
-var playNow = function (el) {
+function normalizeFrame(type, frame, el) {
+    if (type === "linear") {
+        var nFrame = __assign({}, frameTemplates["linear"]);
+        normalizeAttrs(nFrame, frame, el);
+        return nFrame;
+    }
+    else if (type === "spline") {
+        var nFrame = __assign({}, frameTemplates["linear"]);
+        normalizeAttrs(nFrame, frame, el);
+        return nFrame;
+    }
+    else {
+        throw Error("bad frame");
+    }
+}
+// should take a callback or something...
+var begin = function (el, onEnd) {
     el.setAttribute("begin", el.getCurrentTime().toString());
+    el.addEventListener("endEvent", onEnd, { once: true });
 };
-function isLinearFrame(frame) {
-    return frame.calcMode === "linear";
-}
-function isSplineFrame(frame) {
-    return frame.calcMode === "spline";
-}
 var SequentialQueue = /** @class */ (function () {
     function SequentialQueue() {
         this._Q = [];
@@ -102,26 +138,47 @@ var CircularQueue = /** @class */ (function (_super) {
     return CircularQueue;
 }(SequentialQueue));
 var AnimationProxyBase = /** @class */ (function () {
-    function AnimationProxyBase(_animationElement, _Q) {
-        this._animationElement = _animationElement;
-        this._Q = _Q;
+    function AnimationProxyBase(animationElement, 
+    //protected type: T = "linear",
+    type, qtype) {
+        if (qtype === void 0) { qtype = "sequential"; }
+        this.animationElement = animationElement;
+        this.type = type;
+        switch (qtype) {
+            case "sequential":
+                this.Q = new SequentialQueue();
+                break;
+            case "circular":
+                this.Q = new CircularQueue();
+                break;
+            default:
+                throw Error("bad qtype: " + qtype);
+        }
     }
     AnimationProxyBase.prototype.playNext = function () {
-        if (this._Q.isEmpty()) {
+        var _this = this;
+        if (this.Q.isEmpty()) {
             return;
         }
-        var front = this._Q.front();
-        this._Q.advance();
-        if (isLinearFrame(front)) {
-            setLinearAttributes(this._animationElement, front);
+        /*
+         * if paused, don't do anything... or something like that...
+         */
+        var front = this.Q.front();
+        var nFrame;
+        if (this.type === "linear") {
+            nFrame = normalizeFrame(this.type, front, this.animationElement);
         }
-        else if (isSplineFrame(front)) {
-            setSplineAttributes(this._animationElement, front);
+        else if (this.type === "spline") {
+            nFrame = normalizeFrame(this.type, front, this.animationElement);
         }
         else {
-            throw Error('bad frame: ' + JSON.stringify(front, null, 2));
+            throw Error("bad type");
         }
-        playNow(this._animationElement);
+        this.Q.advance();
+        Object.keys(nFrame).forEach(function (attr) {
+            _this.animationElement.setAttribute(attr, nFrame[attr]);
+        });
+        begin(this.animationElement, this.playNext);
     };
     return AnimationProxyBase;
 }());

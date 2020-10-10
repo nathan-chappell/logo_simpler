@@ -1,24 +1,78 @@
-declare abstract class AnimationFrameBase {
-    calcMode: "linear" | "spline";
+declare type Value = string;
+declare const frameTemplates: {
+    linear: {
+        to: string;
+        dur: string;
+        repeatCount: string;
+        calcMode: string;
+        additive: string;
+        accumulate: string;
+    };
+    spline: {
+        keyTimes: string;
+        values: string;
+        keySplines: string;
+        dur: string;
+        repeatCount: string;
+        calcMode: string;
+        additive: string;
+        accumulate: string;
+    };
+};
+declare type FrameTemplates = typeof frameTemplates;
+declare type AnimationFrame = FrameTemplates[keyof typeof frameTemplates];
+declare const normalizeAttrs: (nFrame: {
+    to: string;
     dur: string;
     repeatCount: string;
-    setAttributes(el: SVGAnimationElement): void;
-    static normalize(el: SVGAnimationElement): void;
-}
-interface LinearAnimationFrame extends AnimationFrameBase {
-    to: string;
-}
-declare const setLinearAttributes: (el: SVGAnimationElement, frame: LinearAnimationFrame) => void;
-interface SplineAnimationFrame extends AnimationFrameBase {
+    calcMode: string;
+    additive: string;
+    accumulate: string;
+} | {
     keyTimes: string;
-    keySplines: string;
     values: string;
-}
-declare const setSplineAttributes: (el: SVGAnimationElement, frame: SplineAnimationFrame) => void;
-declare const playNow: (el: SVGAnimationElement) => void;
-declare type AnimationFrame = LinearAnimationFrame | SplineAnimationFrame;
-declare function isLinearFrame(frame: AnimationFrame): frame is LinearAnimationFrame;
-declare function isSplineFrame(frame: AnimationFrame): frame is SplineAnimationFrame;
+    keySplines: string;
+    dur: string;
+    repeatCount: string;
+    calcMode: string;
+    additive: string;
+    accumulate: string;
+}, frame: Partial<{
+    to: string;
+    dur: string;
+    repeatCount: string;
+    calcMode: string;
+    additive: string;
+    accumulate: string;
+}> | Partial<{
+    keyTimes: string;
+    values: string;
+    keySplines: string;
+    dur: string;
+    repeatCount: string;
+    calcMode: string;
+    additive: string;
+    accumulate: string;
+}>, el: SVGAnimationElement) => {
+    to: string;
+    dur: string;
+    repeatCount: string;
+    calcMode: string;
+    additive: string;
+    accumulate: string;
+} | {
+    keyTimes: string;
+    values: string;
+    keySplines: string;
+    dur: string;
+    repeatCount: string;
+    calcMode: string;
+    additive: string;
+    accumulate: string;
+};
+declare function normalizeFrame(type: "linear", frame: Partial<FrameTemplates["linear"]>, el: SVGAnimationElement): FrameTemplates["linear"];
+declare function normalizeFrame(type: "spline", frame: Partial<FrameTemplates["spline"]>, el: SVGAnimationElement): FrameTemplates["spline"];
+declare const begin: (el: SVGAnimationElement, onEnd: () => void) => void;
 interface IAnimationProxy<F> {
     pushFront(frame: Partial<F>): IAnimationProxy<F>;
     pushBack(frame: Partial<F>): IAnimationProxy<F>;
@@ -45,9 +99,10 @@ declare class CircularQueue<T> extends SequentialQueue<T> {
     constructor();
     _advanceOne(): void;
 }
-declare class AnimationProxyBase<F extends AnimationFrame = LinearAnimationFrame, Q extends Queue<F> = SequentialQueue<F>> {
-    protected _animationElement: SVGAnimationElement;
-    protected _Q: Q;
-    constructor(_animationElement: SVGAnimationElement, _Q: Q);
+declare class AnimationProxyBase<T extends "linear" | "spline", Frame extends AnimationFrame = FrameTemplates[T]> {
+    protected animationElement: SVGAnimationElement;
+    protected type: T;
+    protected Q: Queue<Partial<Frame>>;
+    constructor(animationElement: SVGAnimationElement, type: T, qtype?: "sequential" | "circular");
     protected playNext(): void;
 }
