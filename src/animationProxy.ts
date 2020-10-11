@@ -2,12 +2,14 @@ type Value = string;
 
 const frameTemplates = {
   linear: {
+    from: "0",
     to: "0",
     dur: "2s",
     repeatCount: "1",
     calcMode: "linear",
     additive: "sum",
     accumulate: "sum",
+    fill: "freeze",
   },
   spline: {
     keyTimes: "0 1",
@@ -18,6 +20,7 @@ const frameTemplates = {
     calcMode: "spline",
     additive: "sum",
     accumulate: "sum",
+    fill: "freeze",
   },
 };
 
@@ -51,35 +54,69 @@ const normalizeAttrs = (
   return nFrame;
 };
 
-function normalizeFrame(
+function normalizeFrom(el: SVGAnimationElement) {
+  const attributeName = el.getAttribute("attributeName");
+  if (attributeName === "stroke") {
+    return "hsl(0,100%,50%,1)";
+  } else if (attributeName === "transform") {
+    const type = el.getAttribute("type");
+    if (type === "rotate") {
+      return "0";
+    } else if (type === "translate") {
+      return "0";
+    }
+  }
+  throw Error(`couldn't normalize from: ${el}`);
+}
+
+export function normalizeFrame(
   type: "linear",
   frame: Partial<FrameTemplates["linear"]>,
   el: SVGAnimationElement
 ): FrameTemplates["linear"];
 
-function normalizeFrame(
+export function normalizeFrame(
   type: "spline",
   frame: Partial<FrameTemplates["spline"]>,
   el: SVGAnimationElement
 ): FrameTemplates["spline"];
 
-function normalizeFrame(
-  type: keyof FrameTemplates,
+export function normalizeFrame(
+  type: "linear" | "spline",
   frame: Partial<FrameTemplates["spline"]> | Partial<FrameTemplates["linear"]>,
   el: SVGAnimationElement
 ): AnimationFrame {
   if (type === "linear") {
     const nFrame: FrameTemplates["linear"] = { ...frameTemplates["linear"] };
+    const from =
+      (frame as Partial<FrameTemplates["linear"]>).from ??
+      el.getAttribute("to") ??
+      normalizeFrom(el);
     normalizeAttrs(nFrame, frame, el);
+    nFrame.from = from;
+    Object.keys(nFrame).forEach((attr) => {
+      el.setAttribute(
+        attr,
+        nFrame[attr as keyof typeof nFrame]
+      );
+    });
     return nFrame;
   } else if (type === "spline") {
     const nFrame: FrameTemplates["linear"] = { ...frameTemplates["linear"] };
     normalizeAttrs(nFrame, frame, el);
+    Object.keys(nFrame).forEach((attr) => {
+      el.setAttribute(
+        attr,
+        nFrame[attr as keyof typeof nFrame]
+      );
+    });
     return nFrame;
   } else {
     throw Error("bad frame");
   }
 }
+
+//export function normalizeAndSet(type, frame, el)
 
 // should take a callback or something...
 const begin = (el: SVGAnimationElement, onEnd: () => void) => {
@@ -158,24 +195,21 @@ class CircularQueue<T> extends SequentialQueue<T> {
   }
 }
 
-class AnimationProxyBase<
-  T extends "linear" | "spline",
-  Frame extends AnimationFrame = FrameTemplates[T]
-> {
-  protected Q: Queue<Partial<Frame>>;
+export class AnimationProxyBase<F extends "linear" | "spline"> {
+  protected Q: Queue<Partial<FrameTemplates[F]>>;
+  private running: boolean = false;
 
   constructor(
     protected animationElement: SVGAnimationElement,
-    //protected type: T = "linear",
-    protected type: T,
+    protected type: F,
     qtype: "sequential" | "circular" = "sequential"
   ) {
     switch (qtype) {
       case "sequential":
-        this.Q = new SequentialQueue<Partial<Frame>>();
+        this.Q = new SequentialQueue<Partial<FrameTemplates[F]>>();
         break;
       case "circular":
-        this.Q = new CircularQueue<Partial<Frame>>();
+        this.Q = new CircularQueue<Partial<FrameTemplates[F]>>();
         break;
       default:
         throw Error(`bad qtype: ${qtype}`);
@@ -184,40 +218,54 @@ class AnimationProxyBase<
 
   protected playNext() {
     if (this.Q.isEmpty()) {
+      this.running = false;
       return;
     }
+    this.running = true;
     /*
      * if paused, don't do anything... or something like that...
      */
     const front = this.Q.front();
     let nFrame: AnimationFrame;
     if (this.type === "linear") {
-      nFrame = normalizeFrame(
-        this.type as "linear",
-        front,
-        this.animationElement
-      );
+      nFrame = normalizeFrame("linear", front, this.animationElement);
+      //console.log("nFrame", nFrame);
     } else if (this.type === "spline") {
-      nFrame = normalizeFrame(
-        this.type as "spline",
-        front,
-        this.animationElement
-      );
+      nFrame = normalizeFrame("spline", front, this.animationElement);
     } else {
       throw Error("bad type");
     }
     this.Q.advance();
+    /*
     Object.keys(nFrame).forEach((attr) => {
       this.animationElement.setAttribute(
         attr,
         nFrame[attr as keyof typeof nFrame]
       );
     });
-    begin(this.animationElement, this.playNext);
+    /*
+     * maybe instead of this.playNext put some other callback,
+     * emit some event or something...
+     */
+    //begin(this.animationElement, this.playNext.bind(this));
+    begin(this.animationElement, () => {
+      this.running = false;
+      console.log("play next!",this.animationElement);
+      this.playNext();
+    });
+  }
+
+  public pushBack(frame: Partial<FrameTemplates[F]>) {
+    this.Q.pushBack(frame);
+    if (!this.running) {
+      console.warn('not running! starting');
+      this.playNext();
+    }
+    return this;
   }
   /*
-   * pushFront
    * pushBack
+   * pushFront
    * skip
    *
    * later:
@@ -225,3 +273,5 @@ class AnimationProxyBase<
    *  resume
    */
 }
+
+(document as any).AnimationProxy = AnimationProxyBase;

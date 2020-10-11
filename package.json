@@ -5,18 +5,26 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "server": "node server.js",
     "watch": "tsc --watch",
-    "start": "concurrently --raw \"npm:server\" \"npm:watch\""
+    "oldStart": "concurrently --raw \"npm:server\" \"npm:watch\"",
+    "start": "webpack-dev-server --open",
+    "build": "webpack"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "dependencies": {},
+  "dependencies": {
+    "uuid": "^8.3.1"
+  },
   "devDependencies": {
     "@types/node": "^14.11.8",
+    "@types/uuid": "^8.3.0",
     "concurrently": "^5.3.0",
     "prettier": "^2.1.2",
-    "typescript": "^4.0.3"
+    "ts-loader": "^8.0.4",
+    "typescript": "^4.0.3",
+    "webpack": "^4.44.2",
+    "webpack-cli": "^3.3.12",
+    "webpack-dev-server": "^3.11.0"
   }
 }
