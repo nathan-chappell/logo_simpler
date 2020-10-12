@@ -23,5 +23,6 @@ exports.default = {
   devServer: {
     contentBase: './dist',
     watchContentBase: true,
+    host: '0.0.0.0',
   }
 };

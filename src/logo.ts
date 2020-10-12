@@ -1,5 +1,7 @@
 import { v4 } from "uuid";
 
+const getId = () => v4().replace(/-/g, "");
+
 type Degrees = number;
 
 const deg2rad = (d: Degrees) => (Math.PI * d) / 180;
@@ -37,10 +39,10 @@ const RingSVG: (props: RingProps) => RingSVGResult = ({
   color,
   viewBox,
 }) => {
-  const motionID = v4();
-  const strokeID = v4();
-  const rotateID = v4();
-  const innerID = v4();
+  const motionID = getId();
+  const strokeID = getId();
+  const rotateID = getId();
+  const innerID = getId();
   const x1 = radius;
   const y1 = 0;
   const x2 = radius * Math.cos(deg2rad(arcLength));
@@ -50,12 +52,22 @@ const RingSVG: (props: RingProps) => RingSVGResult = ({
              A ${radius} ${radius}
                0 ${longArc} 0
                ${x2} ${y2}`;
-  const commonAttrs = `dur="1s" calcMode="spline" keySplines="0 .5 .5 0" repeatCount="1"`;
+  const commonAttrs = `
+    dur="1s"
+    calcMode="spline"
+		keySplines="1 1 0 0"
+		repeatCount="1"
+		fill="freeze"
+		begin="indefinite"
+		end="indefinite"
+  `;
   const svg = `
     <g>
       <animateMotion 
         id="${motionID}"
         path="M 0 0" 
+        keyTimes="0;1"
+        keyPoints="0;1"
         ${commonAttrs} 
       />
       <svg 
@@ -108,13 +120,15 @@ interface AnimationSpec {
 }
 
 const transition = (spec: AnimationSpec, el: SVGAnimationElement) => {
-  // if you put multiple vals, I assume you know what you're doing
-  if (spec.val.match(/;/)) {
+  if (el.getAttribute('path') !== null) {
+    el.setAttribute('path', spec.val);
+  } else if (spec.val.match(/;/)) {
+    // if you put multiple vals, I assume you know what you're doing
     el.setAttribute("values", spec.val);
   } else {
     const oldVals = el.getAttribute("values")?.split(/;/);
     const from = oldVals ? oldVals[oldVals.length - 1] : undefined;
-    if (from === 'undefined') {
+    if (from === "undefined") {
       throw Error(`couldn't get from val: ${spec}, ${el}`);
     } else {
       el.setAttribute("values", `${from};${spec.val}`);
@@ -123,18 +137,8 @@ const transition = (spec: AnimationSpec, el: SVGAnimationElement) => {
   Object.entries(spec)
     .filter(([k, v]) => k !== "val")
     .forEach(([k, v]) => el.setAttribute(k, v));
-  el.setAttribute("begin", el.getCurrentTime().toString());
-  /*
-  if (spec.dur !== undefined) {
-    el.setAttribute('dur',spec.dur);
-  }
-  if (spec.keySplines !== undefined) {
-    el.setAttribute('keySplines',spec.keySplines);
-  }
-  if (spec.repeatCount !== undefined) {
-    el.setAttribute('repeatCount',spec.repeatCount);
-  }
-  */
+  //el.setAttribute("begin", el.getCurrentTime().toString());
+  (el as any).beginElement();
 };
 
 type BufferMode = "repeat" | "once";
@@ -150,6 +154,8 @@ const defaultModes: RingModes = {
   colors: "once",
   motions: "once",
 };
+
+let once = true;
 
 export class Ring {
   ringSVG: RingSVGResult;
@@ -214,17 +220,21 @@ export class Ring {
         throw Error(`bad next: ${attr}`);
     }
     const nextSpec = q.shift();
+    console.log("nextSpec", nextSpec);
     if (nextSpec === undefined) {
       return;
     } else {
+      if (once) {
+        el.addEventListener("endEvent", (e: Event) => console.log("log", e));
+      }
       transition(nextSpec, el);
-      el.addEventListener(
-        "endEvent",
-        () => {
-          this.next(attr);
-        },
-        { once: true }
-      );
+      const callback = (e: Event) => {
+        console.log(e);
+        el.removeEventListener("endEvent", callback);
+        console.log("running next on", this, attr);
+        this.next(attr);
+      };
+      el.addEventListener("endEvent", callback, { once: true });
       if (mode === "repeat") {
         q.push(nextSpec);
       }
@@ -232,7 +242,7 @@ export class Ring {
   }
 }
 
-export const Logo = () => {
+export const Logo: () => [HTMLDivElement, Ring[]] = () => {
   const div = document.createElement("div");
   div.id = "logo-div";
   div.className = "logo-proto";
@@ -241,7 +251,7 @@ export const Logo = () => {
     </svg>
   `;
   const svg = div.children[0];
-  const rings = [1,2,3,4].map(x => new Ring({radius: x*.2}))
-  svg.innerHTML = rings.map(ring => ring.ringSVG.svg).join("\n");
-  return div;
+  const rings = [1, 2, 3, 4].map((x) => new Ring({ radius: x * 0.2 }));
+  svg.innerHTML = rings.map((ring) => ring.ringSVG.svg).join("\n");
+  return [div, rings];
 };
