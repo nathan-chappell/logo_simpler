@@ -1,4 +1,5 @@
 import { v4 } from "uuid";
+import { fadeIn } from "./effects";
 
 const getId = () => v4().replace(/-/g, "");
 
@@ -24,6 +25,18 @@ const defaultRingProps: RingProps = {
   viewBox: defaultViewBox,
 };
 
+const makeProps: (r: number, l: Degrees, c: string) => RingProps = (
+  r,
+  l,
+  c
+) => ({
+  radius: r,
+  arcLength: l,
+  strokeWidth: r / 2,
+  color: c,
+  viewBox: defaultViewBox,
+});
+
 interface RingSVGResult {
   svg: string;
   motionID: string;
@@ -43,6 +56,7 @@ const RingSVG: (props: RingProps) => RingSVGResult = ({
   const strokeID = getId();
   const rotateID = getId();
   const innerID = getId();
+  //console.log('innerId', innerID);
   const x1 = radius;
   const y1 = 0;
   const x2 = radius * Math.cos(deg2rad(arcLength));
@@ -104,6 +118,7 @@ const RingSVG: (props: RingProps) => RingSVGResult = ({
 };
 
 const getElementOrThrow = (id: string) => {
+  //console.log('getting element id',id);
   const el = document.getElementById(id);
   if (el === null) {
     throw Error(`null element. id: ${id}`);
@@ -117,11 +132,12 @@ interface AnimationSpec {
   dur?: string;
   keySplines?: string;
   repeatCount?: string;
+  callback?: () => void;
 }
 
 const transition = (spec: AnimationSpec, el: SVGAnimationElement) => {
-  if (el.getAttribute('path') !== null) {
-    el.setAttribute('path', spec.val);
+  if (el.getAttribute("path") !== null) {
+    el.setAttribute("path", spec.val);
   } else if (spec.val.match(/;/)) {
     // if you put multiple vals, I assume you know what you're doing
     el.setAttribute("values", spec.val);
@@ -131,6 +147,7 @@ const transition = (spec: AnimationSpec, el: SVGAnimationElement) => {
     if (from === "undefined") {
       throw Error(`couldn't get from val: ${spec}, ${el}`);
     } else {
+      //console.log('transition',from,spec.val);
       el.setAttribute("values", `${from};${spec.val}`);
     }
   }
@@ -190,6 +207,17 @@ export class Ring {
     ) as unknown) as SVGAnimationElement;
   }
 
+  get pathColor(): string {
+    const color = ((getElementOrThrow(
+      this.ringSVG.innerID
+    ) as unknown) as SVGAnimationElement).children[0]?.getAttribute("stroke");
+    if (typeof color !== "string") {
+      throw Error(`couldn't get color!`);
+    } else {
+      return color;
+    }
+  }
+
   start() {
     this.next("rotation");
     this.next("color");
@@ -220,29 +248,66 @@ export class Ring {
         throw Error(`bad next: ${attr}`);
     }
     const nextSpec = q.shift();
-    console.log("nextSpec", nextSpec);
+    //console.log("nextSpec", nextSpec);
     if (nextSpec === undefined) {
       return;
     } else {
+      /*
       if (once) {
         el.addEventListener("endEvent", (e: Event) => console.log("log", e));
       }
+      */
       transition(nextSpec, el);
-      const callback = (e: Event) => {
-        console.log(e);
-        el.removeEventListener("endEvent", callback);
-        console.log("running next on", this, attr);
+      /*
+      let _res: () => void;
+      const promise = new Promise((res, err) => {
+        _res = res;
+      });
+      */
+      const onEnd = (e: Event) => {
+        //console.log(e);
+        //el.removeEventListener("endEvent", callback);
+        //console.log("running next on", this, attr);
+        //_res();
+        nextSpec.callback?.call(undefined);
         this.next(attr);
       };
-      el.addEventListener("endEvent", callback, { once: true });
+      el.addEventListener("endEvent", onEnd, { once: true });
       if (mode === "repeat") {
+        //console.log('repeat', attr, q[0]);
         q.push(nextSpec);
       }
     }
   }
 }
 
-export const Logo: () => [HTMLDivElement, Ring[]] = () => {
+export const innerRing = (r: number, color: string) => `
+  <path d="M ${r} 0 
+           A ${r} ${r} 0 0 0 -${r} 0
+           A ${r} ${r} 0 0 0  ${r} 0"
+        fill = "none"
+        stroke="${color}"
+        stroke-width=".02"
+  />
+`;
+
+export const Logo: (
+  props?: Partial<RingProps>[]
+) => [HTMLDivElement, Ring[]] = (props) => {
+  if (props === undefined) {
+    props = [1, 2, 3, 4].map((x: number) =>
+      makeProps(x * 0.2, 210 + 15 * x, `hsl(${240 + 10 * x},80%,60%,.6)`)
+    );
+  }
+  const innerRings = props
+    .map((props, i) =>
+      innerRing(
+        props.radius ?? i * 0.2,
+        props.color ?? `hsl(240+${10 * i},80%,60%,.6)`
+      )
+    )
+    .join("\n");
+  //console.log(innerRings);
   const div = document.createElement("div");
   div.id = "logo-div";
   div.className = "logo-proto";
@@ -252,6 +317,9 @@ export const Logo: () => [HTMLDivElement, Ring[]] = () => {
   `;
   const svg = div.children[0];
   const rings = [1, 2, 3, 4].map((x) => new Ring({ radius: x * 0.2 }));
-  svg.innerHTML = rings.map((ring) => ring.ringSVG.svg).join("\n");
+  svg.innerHTML = `
+    ${innerRings}
+    ${rings.map((ring) => ring.ringSVG.svg).join("\n")}
+  `;
   return [div, rings];
 };
